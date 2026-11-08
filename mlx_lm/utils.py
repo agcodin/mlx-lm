@@ -35,8 +35,24 @@ if os.getenv("MLXLM_USE_MODELSCOPE", "False").lower() == "true":
 else:
     from huggingface_hub import snapshot_download
 
-# For large models with lots of files
-resource.setrlimit(resource.RLIMIT_NOFILE, (2048, 4096))
+
+def _raise_nofile_limit(target: int = 2048):
+    """Raise the soft open-file limit for large models with lots of files.
+
+    Never lowers the soft limit and never touches the hard limit, which an
+    unprivileged process can't raise again once lowered.
+    """
+    soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    if hard != resource.RLIM_INFINITY:
+        target = min(target, hard)
+    if soft != resource.RLIM_INFINITY and soft < target:
+        try:
+            resource.setrlimit(resource.RLIMIT_NOFILE, (target, hard))
+        except (ValueError, OSError):
+            pass
+
+
+_raise_nofile_limit()
 
 from mlx.utils import tree_flatten, tree_map, tree_reduce, tree_unflatten
 

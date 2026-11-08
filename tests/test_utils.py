@@ -457,5 +457,44 @@ class TestTrustRemoteCode(unittest.TestCase):
             utils._compressed_tensors_quantization({"format": "float-quantized"})
 
 
+class TestNofileLimit(unittest.TestCase):
+    def _run(self, limits):
+        import resource
+        from unittest import mock
+
+        with (
+            mock.patch.object(resource, "getrlimit", return_value=limits),
+            mock.patch.object(resource, "setrlimit") as setrlimit,
+        ):
+            utils._raise_nofile_limit()
+        return setrlimit
+
+    def test_raises_soft_only(self):
+        import resource
+
+        setrlimit = self._run((256, resource.RLIM_INFINITY))
+        setrlimit.assert_called_once_with(
+            resource.RLIMIT_NOFILE, (2048, resource.RLIM_INFINITY)
+        )
+
+    def test_keeps_hard_limit(self):
+        import resource
+
+        setrlimit = self._run((256, 10240))
+        setrlimit.assert_called_once_with(resource.RLIMIT_NOFILE, (2048, 10240))
+
+    def test_hard_limit_below_target(self):
+        import resource
+
+        setrlimit = self._run((256, 1024))
+        setrlimit.assert_called_once_with(resource.RLIMIT_NOFILE, (1024, 1024))
+
+    def test_never_lowers(self):
+        import resource
+
+        self.assertFalse(self._run((8192, 8192)).called)
+        self.assertFalse(self._run((resource.RLIM_INFINITY, 8192)).called)
+
+
 if __name__ == "__main__":
     unittest.main()
