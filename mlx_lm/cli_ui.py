@@ -124,7 +124,15 @@ def corridor_input(console: Console) -> str:
 
     with console.capture() as cap2:
         console.print("[ui.accent]›[/ui.accent] ", end="")
-    prompt = _ANSI_RE.sub(lambda m: f"\x01{m.group(0)}\x02", cap2.get())
+    prompt = cap2.get()
+    try:
+        # Importing readline makes input() use it for line editing and history,
+        # and it is what gives the \x01/\x02 markers below their meaning.
+        import readline  # noqa: F401
+
+        prompt = _ANSI_RE.sub(lambda m: f"\x01{m.group(0)}\x02", prompt)
+    except ImportError:
+        pass
     try:
         return input(prompt)
     finally:

@@ -1,8 +1,10 @@
 # Copyright © 2025 Apple Inc.
 
+import sys
 import unittest
 from unittest.mock import MagicMock, patch
 
+from mlx_lm import cli_ui
 from mlx_lm.chat import DEFAULT_PREFILL_STEP_SIZE, setup_arg_parser
 
 
@@ -179,6 +181,32 @@ class TestChat(unittest.TestCase):
         self.assertEqual(len(call_args), 1)
         self.assertEqual(call_args[0]["role"], "user")
         self.assertEqual(call_args[0]["content"], "What is the weather?")
+
+
+class TestCorridorInput(unittest.TestCase):
+
+    def _prompt(self, modules):
+        console = cli_ui.make_console()
+        console.force_terminal = True
+        with (
+            patch.dict(sys.modules, modules),
+            patch("builtins.input", return_value="hi") as mock_input,
+            patch("sys.stdout"),
+        ):
+            self.assertEqual(cli_ui.corridor_input(console), "hi")
+        return mock_input.call_args[0][0]
+
+    def test_markers_only_with_readline(self):
+        prompt = self._prompt({"readline": MagicMock()})
+        self.assertIn("\x01\x1b[", prompt)
+        self.assertIn("\x02", prompt)
+
+    def test_no_stray_markers_without_readline(self):
+        # A None entry makes `import readline` raise ImportError.
+        prompt = self._prompt({"readline": None})
+        self.assertNotIn("\x01", prompt)
+        self.assertNotIn("\x02", prompt)
+        self.assertIn("\x1b[", prompt)
 
 
 if __name__ == "__main__":
