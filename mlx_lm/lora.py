@@ -73,6 +73,7 @@ CONFIG_DEFAULTS = {
     "grad_checkpoint": False,
     "grad_accumulation_steps": 1,
     "clear_cache_threshold": 0,
+    "grad_clip": 0.0,
     "lr_schedule": None,
     "lora_parameters": {"rank": 8, "dropout": 0.0, "scale": 20.0},
     "mask_prompt": False,
@@ -202,6 +203,12 @@ def build_parser():
         help="Clear the allocator cache between steps if it grows too large.",
     )
     parser.add_argument(
+        "--grad-clip",
+        type=float,
+        help="Clip the global gradient norm to this value (0 disables).",
+        default=None,
+    )
+    parser.add_argument(
         "--report-to",
         type=str,
         default=None,
@@ -281,6 +288,7 @@ def train_model(
         grad_checkpoint=args.grad_checkpoint,
         grad_accumulation_steps=args.grad_accumulation_steps,
         clear_cache_threshold=args.clear_cache_threshold,
+        grad_clip=args.grad_clip,
     )
 
     # Initialize the selected optimizer

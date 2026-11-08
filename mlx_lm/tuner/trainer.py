@@ -11,6 +11,7 @@ import mlx.core as mx
 import mlx.nn as nn
 import numpy as np
 from mlx.nn.utils import average_gradients
+from mlx.optimizers import clip_grad_norm
 from mlx.utils import tree_flatten, tree_map
 
 from ..cli_ui import TrainUI, rprint
@@ -81,6 +82,12 @@ class TrainingArgs:
         default=0,
         metadata={
             "help": "Clear the allocator cache between steps if it grows too large."
+        },
+    )
+    grad_clip: float = field(
+        default=0.0,
+        metadata={
+            "help": "Clip the global gradient norm to this value. 0 disables clipping."
         },
     )
 
@@ -255,6 +262,8 @@ def train(
             grad = average_gradients(grad)
             if grad_accum_steps > 1:
                 grad = tree_map(lambda x: x / grad_accum_steps, grad)
+            if args.grad_clip > 0:
+                grad, _ = clip_grad_norm(grad, args.grad_clip)
             optimizer.update(model, grad)
             grad = None
 

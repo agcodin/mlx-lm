@@ -530,6 +530,72 @@ class TestTrainModel(unittest.TestCase):
         training_args = mock_train.call_args.kwargs["args"]
         self.assertEqual(training_args.clear_cache_threshold, 1 << 30)
 
+    def test_grad_clip_reaches_trainer(self):
+        from mlx_lm.models import llama
+
+        model = llama.Model(
+            llama.ModelArgs(
+                model_type="llama",
+                hidden_size=64,
+                num_hidden_layers=2,
+                intermediate_size=128,
+                num_attention_heads=4,
+                rms_norm_eps=1e-5,
+                vocab_size=100,
+            )
+        )
+        with tempfile.TemporaryDirectory() as adapter_path:
+            args = types.SimpleNamespace(
+                **{
+                    **lora.CONFIG_DEFAULTS,
+                    "num_layers": 2,
+                    "adapter_path": adapter_path,
+                    "grad_clip": 1.5,
+                }
+            )
+            with patch("mlx_lm.lora.train") as mock_train:
+                lora.train_model(args, model, [], [])
+
+        self.assertEqual(mock_train.call_args.kwargs["args"].grad_clip, 1.5)
+
+    def test_grad_clip_bounds_update(self):
+        from mlx_lm.tuner.trainer import TrainingArgs, train
+
+        def run(grad_clip):
+            model = nn.Linear(4, 1, bias=False)
+            model.weight = mx.zeros((1, 4))
+            model.freeze()
+            model.unfreeze(keys=["weight"])
+
+            def loss(model, batch):
+                # Gradient w.r.t. the weight is 1000 in every entry.
+                return 1000.0 * model.weight.sum(), mx.array(1)
+
+            def batches(*args, **kwargs):
+                while True:
+                    yield (mx.zeros((1,)),)
+
+            with tempfile.TemporaryDirectory() as d:
+                train(
+                    model,
+                    opt.SGD(learning_rate=1.0),
+                    [],
+                    args=TrainingArgs(
+                        iters=1,
+                        batch_size=1,
+                        steps_per_report=10,
+                        steps_per_save=10,
+                        adapter_file=d + "/adapters.safetensors",
+                        grad_clip=grad_clip,
+                    ),
+                    loss=loss,
+                    iterate_batches=batches,
+                )
+            return mx.linalg.norm(model.weight).item()
+
+        self.assertAlmostEqual(run(0.0), 2000.0, places=1)
+        self.assertAlmostEqual(run(0.5), 0.5, places=3)
+
 
 if __name__ == "__main__":
     unittest.main()
